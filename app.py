@@ -12,6 +12,10 @@ import asyncio
 os.environ['SSL_CERT_FILE'] = certifi.where()
 load_dotenv(override=True)
 
+class NameCheckOutput(BaseModel):
+    is_name_in_message: bool
+    name: str
+
 class Me:
     def __init__(self):
         self.google_api_key = os.getenv('GOOGLE_API_KEY')
@@ -95,6 +99,25 @@ class Me:
         email_tools = self.Email_Sender_Tools()
         email_agent= Agent(name="Email Manager",instructions=instructions,tools=email_tools,model=self.gemini_model,handoff_description="Convert an email to HTML and send it")
         return email_agent
+    
+    def guardrail_agent(self):
+        guardrail_agent = Agent( 
+            name="Name check",
+            instructions="Check if the user is including someone's personal name in what they want you to do.",
+            output_type=NameCheckOutput,
+            model="gpt-4o-mini"
+        )
+        return guardrail_agent
+    @input_guardrail
+    async def guardrail_function(self,ctx,message):
+        """
+        This function checks if the message contains a personal name.
+        If it does, it returns a GuardrailFunctionOutput with is_name_in_message set to True and the name.
+        If it doesn't, it returns is_name_in_message set to False and an empty name.
+        """
+        guardrail_agent = self.guardrail_agent()
+        result = await Runner.run(guardrail_agent, message,context=ctx.context)
+        return GuardrailFunctionOutput(tripwire_triggered=result.is_name_in_message, name=result.name)
     def Sales_Manager(self):
         sales_tools = self.Sales_tools()
         handoffs=[self.Emailer_Agent()]
@@ -113,8 +136,9 @@ class Me:
         - You must use the sales agent tools to generate the drafts — do not write them yourself.
         - You must hand off exactly ONE email to the Email Manager — never more than one.
         """
-        sales_manager = Agent(name="Sales Manager",instructions=sales_manager_instructions,tools=sales_tools,handoffs=handoffs,model=self.gemini_model)
+        sales_manager = Agent(name="Sales Manager",instructions=sales_manager_instructions,tools=sales_tools,handoffs=handoffs,model=self.gemini_model,input_guardrails=[self.guardrail_function])
         return sales_manager
+
     async def run(self):
         sales_manager = self.Sales_Manager()
         first_name, domain = self.parse_email(self.recipient_email)
