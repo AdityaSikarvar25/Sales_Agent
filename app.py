@@ -49,6 +49,16 @@ class Me:
         self.GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
         self.gemini_client = AsyncOpenAI(base_url=self.GEMINI_BASE_URL, api_key=self.google_api_key)
         self.gemini_model = OpenAIChatCompletionsModel(model="gemini-2.0-flash", openai_client=self.gemini_client)
+    def parse_email(self, email: str) -> (str, str):
+        parts = email.split('@')
+        username = parts[0]
+        domain = parts[1]
+        if '.' in username:
+            first_name = username.split('.')[0].capitalize()
+        else:
+            first_name = username.capitalize()
+        return first_name, domain
+    
     def Sales_Agent(self):
         sales_agent1 =  Agent(name="Sales Agent 1", instructions=self.instructions1, model=self.gemini_model)
         sales_agent2 =  Agent(name="Sales Agent 2", instructions=self.instructions2, model=self.gemini_model)
@@ -107,10 +117,12 @@ class Me:
         return sales_manager
     async def run(self):
         sales_manager = self.Sales_Manager()
-        message = "Send out a cold sales email addressed to Dear CEO from Aditya Sikarvar"
+        first_name, domain = self.parse_email(self.recipient_email)
+        message = f"Write a cold sales email to {first_name} at {domain}. The email should be from Aditya Sikarvar."
         with trace("Automated SDR"):
             result = await Runner.run(sales_manager,message)
         return result
+
 if __name__ == "__main__":
     async def main():
         me = Me()
